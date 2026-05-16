@@ -91,11 +91,12 @@ A implementação é dividida em **fases independentes**. Ao final de cada fase,
 
 Trabalho de base que destrava todo o resto.
 
-- [ ] Adicionar `.gitignore` raiz cobrindo `node_modules`, `dist`, `.env`, `*.db`.
-- [ ] Adicionar `.env.example` em `backend/` documentando `JWT_SECRET`, `PORT`, `CORS_ORIGINS`, `DATABASE_URL`.
-- [ ] Adicionar script `lint` aos `package.json` de backend e frontend (se ainda não existir) — necessário para o stage de lint do Jenkins.
+- [x] Adicionar `.gitignore` raiz cobrindo `node_modules`, `dist`, `.env`, `*.db`.
+- [x] Adicionar `.env.example` em `backend/` documentando `JWT_SECRET`, `PORT`, `CORS_ORIGINS`, `DATABASE_URL` (já existia, completo).
+- [x] Adicionar script `lint` aos `package.json` de backend e frontend (frontend já tinha; backend agora usa `tsc --noEmit`).
+- [x] Registrar `backend/` e `frontend/` como **git submodules** do repo raiz (`EidrianXD/meeting-room-booking-{api,frontend}`).
 
-**Critério de aceite:** `git status` limpo; `npm test` passa nos dois projetos a partir de uma instalação limpa.
+**Critério de aceite:** `git status` limpo; `npm test` passa nos dois projetos a partir de uma instalação limpa. ✅
 
 ---
 
