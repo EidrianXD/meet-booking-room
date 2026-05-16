@@ -102,12 +102,15 @@ Trabalho de base que destrava todo o resto.
 
 ### Fase 1 — Containerização do backend (≈2h)
 
-- [ ] `backend/Dockerfile` multi-stage:
-  - `deps`: instala dependências de produção e devDependencies.
-  - `build`: roda `prisma generate` e `tsc`.
-  - `runtime`: imagem `node:20-alpine`, usuário não-root, copia apenas `dist/`, `node_modules` de produção e `prisma/`. Expõe `3000`. Entrypoint que roda `prisma migrate deploy` antes de `node dist/src/main.js`.
-- [ ] `backend/.dockerignore` (exclui `node_modules`, `dist`, `prisma/dev.db`, `.env`, `tests`).
-- [ ] Validar build local: `docker build -t distrimed-backend backend/` e `docker run --rm -p 3000:3000 -e JWT_SECRET=dev distrimed-backend`.
+- [x] `backend/Dockerfile` multi-stage:
+  - `deps`: instala todas as dependências para o build.
+  - `build`: roda `prisma generate` e `tsc`, depois `npm prune --omit=dev`.
+  - `runtime`: imagem `node:20-slim` (Debian, evita complicação de `binaryTargets` musl do Alpine para o Prisma), usuário não-root (`node`), copia `node_modules` já pruned, `dist/` e `prisma/`. Expõe `3000`. Entrypoint que roda `prisma migrate deploy` antes de `node dist/src/main.js`. Inclui `HEALTHCHECK` apontando para `/health`.
+- [x] `backend/.dockerignore` (exclui `node_modules`, `dist`, `prisma/dev.db`, `.env`, `tests`, etc.).
+- [x] Ajustes paralelos:
+  - `prisma` CLI movido de `devDependencies` para `dependencies` (necessário para `migrate deploy` em runtime).
+  - `package-lock.json` removido do `.gitignore` (necessário para `npm ci` reprodutível no Jenkins).
+- [ ] Validar build local: `docker build -t distrimed-backend backend/` e `docker run --rm -p 3000:3000 -e JWT_SECRET=dev distrimed-backend`. _(Pendente: aguardando Docker Desktop ser instalado.)_
 - [ ] Validar `/health` respondendo dentro do container.
 
 **Critério de aceite:** container do backend sobe isoladamente e responde em `GET /health`.
