@@ -1,0 +1,48 @@
+# Dependências
+**/node_modules/
+
+# Build
+**/dist/
+**/build/
+**/.quasar/
+**/.output/
+
+# Variáveis de ambiente (cada app tem seu .env.example versionado)
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Banco SQLite local (será removido na Fase 6)
+**/*.db
+**/*.db-journal
+
+# Logs
+**/*.log
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cobertura de testes
+**/coverage/
+**/.nyc_output/
+
+# Claude / ferramentas locais
+.claude/
+**/.claude/
+
+# Artefatos do Trivy / scans
+trivy-report.*
+.trivycache/
