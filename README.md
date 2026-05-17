@@ -135,16 +135,22 @@ Trabalho de base que destrava todo o resto.
 
 ### Fase 3 — Orquestração local com Docker Compose (≈1h)
 
-- [ ] `docker-compose.yml` na raiz com serviços `backend` e `frontend`:
-  - Volume nomeado para persistência do `dev.db` do SQLite.
-  - Healthcheck no backend usando `wget /health`.
-  - `frontend` com `depends_on` + `condition: service_healthy` no backend.
-  - Network compartilhada (default bridge basta).
-  - Variáveis de ambiente lidas de `.env` na raiz.
-- [ ] `.env.example` na raiz com todas as variáveis necessárias.
-- [ ] Validar fluxo completo: `docker compose up --build` → acessar SPA → login → criar booking.
+- [x] `docker-compose.yml` na raiz com serviços `backend` e `frontend`:
+  - Volume nomeado `distrimed-backend-data` montado em `/app/data` (persistência do `dev.db` do SQLite).
+  - `HEALTHCHECK` herdado das imagens (definido nos Dockerfiles).
+  - `frontend` com `depends_on: backend.condition: service_healthy`.
+  - Network bridge nomeada (`distrimed-net`); backend **não exposto** ao host, toda comunicação SPA↔API passa pelo proxy do Nginx.
+  - Variáveis lidas de `.env` na raiz com defaults sensatos via `${VAR:-default}`; `JWT_SECRET` obrigatório (`${JWT_SECRET:?...}`).
+- [x] `.env.example` na raiz documentando `JWT_SECRET`, `SEED_ON_BOOT`, `FRONTEND_PORT`, `VITE_API_BASE_URL`.
+- [x] Entrypoint do backend ganhou suporte a `SEED_ON_BOOT=true` — roda `dist/prisma/seed.js` (idempotente, upsert) após `migrate deploy`. Permite que o primeiro `docker compose up` já entregue usuários e salas prontos para o login.
+- [x] Validação ponta a ponta (curl simulando o browser):
+  - `GET /api/health` → `{"status":"ok"}`
+  - `POST /api/auth/login` (`john`/`123456`) → JWT retornado
+  - `GET /api/rooms` autenticado → 3 salas (`Alfa`, `Beta`, `Gama`)
+  - `POST /api/bookings` autenticado → booking criado
+  - **Persistência:** `docker compose restart backend` → booking sobreviveu (volume OK).
 
-**Critério de aceite:** `docker compose up` levanta a aplicação completa e o fluxo principal funciona pelo navegador.
+**Critério de aceite:** `docker compose up` levanta a aplicação completa e o fluxo principal funciona pelo navegador. ✅
 
 ---
 

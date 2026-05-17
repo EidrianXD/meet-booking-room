@@ -1,0 +1,61 @@
+# =============================================================================
+# Orquestração local do sistema Distrimed (backend + frontend).
+#
+# Uso típico:
+#   cp .env.example .env        # ajustar JWT_SECRET, etc.
+#   docker compose up --build
+#   # acessar http://localhost:${FRONTEND_PORT:-8080}
+#
+# O backend NÃO é exposto na host network — toda comunicação SPA → API passa
+# pelo reverse proxy do Nginx do frontend (/api/* → backend:3000/). Isso
+# resolve CORS, simula o cenário real de produção e mantém a superfície de
+# rede mínima.
+# =============================================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: distrimed-backend:dev
+    container_name: distrimed-backend
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
+      SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
+      # PORT e DATABASE_URL já têm defaults na imagem (3000 e /app/data/dev.db).
+    volumes:
+      # Persistência do SQLite entre restarts. Substituído por serviço Postgres
+      # na Fase 6.
+      - backend-data:/app/data
+    networks:
+      - distrimed-net
+    # O HEALTHCHECK herdado da imagem (Dockerfile) é respeitado pelo Compose
+    # e usado pelo `depends_on: condition: service_healthy` abaixo.
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Build-time: define a base da API no bundle. `/api` casa com o proxy
+        # do Nginx (mesmo container). Sobrescreva apenas se for servir a SPA
+        # em domínio separado do backend.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    image: distrimed-frontend:dev
+    container_name: distrimed-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - distrimed-net
+
+volumes:
+  backend-data:
+    name: distrimed-backend-data
+
+networks:
+  distrimed-net:
+    name: distrimed-net
+    driver: bridge
