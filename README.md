@@ -156,19 +156,30 @@ Trabalho de base que destrava todo o resto.
 
 ### Fase 4 — Pipeline Jenkins (≈3h)
 
-- [ ] `docker/jenkins/docker-compose.yml` para subir o Jenkins localmente com plugins essenciais (Docker, Pipeline, Credentials, Git, BlueOcean opcional). Monta `/var/run/docker.sock` para builds.
-- [ ] `Jenkinsfile` declarativo na raiz com os stages:
-  1. **Checkout** — clona o repo.
-  2. **Install** — `npm ci` em backend e frontend (em paralelo).
-  3. **Lint & Test** — paralelo entre backend e frontend, falha o pipeline se algum quebrar.
-  4. **Build images** — `docker build` para backend e frontend, taggeando com `${GIT_COMMIT:0:7}` e `latest` (no branch principal).
-  5. **Security scan** — Trivy com `--severity HIGH,CRITICAL --ignore-unfixed --exit-code 1`.
-  6. **Push** — login no GHCR com credencial do Jenkins (`GHCR_PAT`) e push das duas tags.
-  7. **Deploy** — `docker compose -p prod -f docker-compose.yml pull && up -d` no mesmo host.
-- [ ] Webhook do GitHub apontando para o Jenkins (ou polling SCM para a demo).
-- [ ] Documentar no README como criar a credencial `GHCR_PAT` (PAT com escopo `write:packages`).
+- [x] `docker/jenkins/` — stack do Jenkins local (Docker outside of Docker via socket do host):
+  - `Dockerfile` com plugins pré-instalados (workflow, docker-workflow, github, configuration-as-code, etc.), Docker CLI + Compose plugin, `usermod -aG root jenkins` para acesso ao socket.
+  - `jenkins.yaml` (JCasC) bootstrapa o admin user via env (sem setup wizard).
+  - `docker-compose.yml` + `.env.example` + `README.md` com instruções de setup (credenciais + criação do job).
+- [x] `Jenkinsfile` declarativo na raiz com os stages:
+  1. **Checkout** — com `git submodule update --init --recursive`.
+  2. **Backend / Frontend: install + lint + test** — sequencial entre os dois, cada um num container `node:20-slim` / `node:22-slim` via `agent docker { reuseNode true }`.
+  3. **Build images** — paralelo, taggeando com `${SHA_SHORT}` e `latest`.
+  4. **Trivy scan** — paralelo, `--severity HIGH,CRITICAL --ignore-unfixed --skip-dirs usr/local/lib/node_modules/npm`, caches separados por scan para evitar lock contention do BoltDB.
+  5. **Push GHCR** — `docker login` com credencial `ghcr-pat` (Username/Password) + push das 4 tags.
+  6. **Deploy local prod** — re-autentica no GHCR, `docker compose -p distrimed-prod pull && up -d --no-build` com `BACKEND_TAG`/`FRONTEND_TAG` = SHA-7 da build. Roda na porta 8090.
+- [x] Polling SCM (`H/1 * * * *`) — substituto local do webhook do GitHub.
+- [x] Quality gate Trivy:
+  - Backend: `apt-get upgrade` no runtime stage zera os CVEs de glibc/libcap2/libsystemd0.
+  - Frontend: `apk upgrade` no runtime stage zera os CVEs de openssl/libpng/libxml2/musl/zlib.
+  - Bundled `npm` do Node base image (`/usr/local/lib/node_modules/npm`) explicitamente skipado (não roda em runtime).
 
-**Critério de aceite:** push no `main` dispara o pipeline, todos os stages ficam verdes e a versão nova fica acessível no `compose up -d` final.
+**Critério de aceite:** push no `main` dispara o pipeline, todos os stages ficam verdes e a versão nova fica acessível no `compose up -d` final. ✅
+
+**Validação na build #3 (commit `0e63d77`):**
+- 4 tags publicadas no GHCR (`distrimed-backend:0e63d77`, `:latest`, `distrimed-frontend:0e63d77`, `:latest`).
+- `distrimed-prod` rodando em `http://localhost:8090`, com fluxo completo (SPA → login → rooms) validado via curl.
+
+**Ponto conhecido (não bloqueante, candidato a polimento na Fase 7):** o `docker-compose.yml` da raiz declara `name: distrimed-backend-data` para o volume, então dev (`-p distrimed`) e prod (`-p distrimed-prod`) compartilham o mesmo volume físico. Compose alerta com `volume already exists but was created for project "distrimed"`. Para isolamento real entre dev/prod, remover o `name:` (deixar derivar do project name) ou marcar `external: true`.
 
 ---
 
