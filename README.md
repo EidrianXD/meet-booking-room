@@ -24,18 +24,38 @@ Fluxo do pipeline: push no `main` → checkout com submodules → testes paralel
 
 **Pré-requisitos:** Docker Desktop instalado e rodando.
 
-### Subir só a aplicação (sem o Jenkins)
+Este guia leva qualquer pessoa do zero — sem nenhuma configuração prévia do GitHub ou Jenkins — até ver o pipeline rodando no próprio computador. Cada operador usa **o seu próprio GitHub** (não o do autor do projeto).
+
+### Passo 1 — Clonar o repositório
 
 ```bash
 git clone --recurse-submodules https://github.com/EidrianXD/meet-booking-room.git
 cd meet-booking-room
-cp .env.example .env             # edite JWT_SECRET e DB_PASSWORD
+```
+
+### Passo 2 — Configurar variáveis de ambiente
+
+```bash
+cp .env.example .env
+```
+
+Edite `.env` e ajuste:
+
+- `GHCR_OWNER` → seu login do GitHub em **lowercase** (ex: `joaosilva` se você é `JoaoSilva` no GitHub)
+- `JWT_SECRET` → qualquer string aleatória (`openssl rand -hex 32`)
+- `DB_PASSWORD` → senha do Postgres local (`openssl rand -hex 24`)
+
+### Passo 3 — Subir só a aplicação
+
+```bash
 docker compose up --build
 ```
 
-Depois abra **http://localhost:8080** e faça login com `john` / `123456`.
+Quando os 3 containers ficarem `healthy`, abra **http://localhost:8080** e faça login com `john` / `123456`.
 
-### Subir o pipeline CI/CD completo
+### Passo 4 — Subir o pipeline CI/CD completo
+
+Para ver o ciclo completo (testes + build + scan + push + deploy), suba o Jenkins local:
 
 ```bash
 # em outro terminal
@@ -44,9 +64,18 @@ cp .env.example .env             # edite JENKINS_ADMIN_PASSWORD
 docker compose up -d --build
 ```
 
-Acesse **http://localhost:8081**, siga o passo-a-passo de [`docker/jenkins/README.md`](docker/jenkins/README.md) (criar credenciais `ghcr-pat`, `jwt-secret-prod`, `db-password-prod` + criar o job `distrimed`). Clique **Build Now**. Ao final:
-- Imagens em https://github.com/EidrianXD?tab=packages
-- Deploy em **http://localhost:8090** (independente da app de dev em :8080)
+Acesse **http://localhost:8081** e siga o passo-a-passo de [`docker/jenkins/README.md`](docker/jenkins/README.md) — o guia leva você por:
+
+1. Como gerar um Personal Access Token (PAT) no GitHub
+2. Cadastrar as 3 credenciais (`ghcr-pat`, `jwt-secret-prod`, `db-password-prod`)
+3. Criar o job `distrimed`
+4. Disparar a primeira build
+
+Ao final você terá:
+- **Imagens publicadas no seu GHCR** em `https://github.com/SEU_USUARIO?tab=packages`
+- **Aplicação prod rodando** em http://localhost:8090 (independente da app dev em :8080)
+
+---
 
 Este documento descreve a containerização e CI/CD implementados em fases incrementais.
 

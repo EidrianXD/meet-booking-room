@@ -37,7 +37,9 @@ services:
     # pulls de imagens já pushadas pelo Jenkins (CI/CD). O default `dev`
     # casa com builds locais (`docker compose up --build`); no deploy via
     # Jenkins, BACKEND_TAG é setado para o commit SHA-7 da build.
-    image: ghcr.io/eidrianxd/distrimed-backend:${BACKEND_TAG:-dev}
+    # GHCR_OWNER deve estar no .env (ou nas vars de ambiente do Jenkins
+    # no deploy stage). É o login GitHub em lowercase do operador.
+    image: ghcr.io/${GHCR_OWNER:?defina GHCR_OWNER no .env (seu login GitHub em lowercase)}/distrimed-backend:${BACKEND_TAG:-dev}
     build:
       context: ./backend
     container_name: distrimed-backend
@@ -55,7 +57,7 @@ services:
     # e usado pelo `depends_on: condition: service_healthy` do frontend abaixo.
 
   frontend:
-    image: ghcr.io/eidrianxd/distrimed-frontend:${FRONTEND_TAG:-dev}
+    image: ghcr.io/${GHCR_OWNER}/distrimed-frontend:${FRONTEND_TAG:-dev}
     build:
       context: ./frontend
       args:

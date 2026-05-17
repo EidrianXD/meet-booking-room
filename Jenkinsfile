@@ -11,9 +11,12 @@
 //     → Deploy local prod (apenas main)
 //
 // Pré-requisitos no Jenkins:
-//   - Credencial "ghcr-pat" (Username/Password) — username = login GitHub,
-//     password = PAT com escopo write:packages.
+//   - Credencial "ghcr-pat" (Username/Password) — username = login GitHub
+//     do operador, password = PAT com escopos write:packages, read:packages,
+//     delete:packages. O username DESTA credencial determina o owner GHCR
+//     onde as imagens serão publicadas (ghcr.io/<username-lowercase>/...).
 //   - Credencial "jwt-secret-prod" (Secret Text) — JWT_SECRET do deploy.
+//   - Credencial "db-password-prod" (Secret Text) — senha do Postgres do deploy.
 //   - Docker CLI disponível no controller (DooD via socket do host).
 // =============================================================================
 
@@ -28,12 +31,6 @@ pipeline {
         disableConcurrentBuilds()
     }
 
-    environment {
-        GHCR_OWNER     = 'eidrianxd'
-        IMAGE_BACKEND  = "ghcr.io/${GHCR_OWNER}/distrimed-backend"
-        IMAGE_FRONTEND = "ghcr.io/${GHCR_OWNER}/distrimed-frontend"
-    }
-
     triggers {
         // Polling a cada minuto (com jitter "H"). Suficiente para demo local.
         // Em produção real, prefira webhook do GitHub.
@@ -46,13 +43,26 @@ pipeline {
             steps {
                 checkout scm
                 sh 'git submodule update --init --recursive'
-                script {
-                    env.SHA_SHORT = sh(
-                        returnStdout: true,
-                        script: 'git rev-parse --short=7 HEAD'
-                    ).trim()
+                // Deriva o owner GHCR do username da credencial `ghcr-pat`
+                // (em lowercase, como exige o GHCR). Assim cada operador
+                // publica as imagens no SEU próprio namespace sem hardcode
+                // no Jenkinsfile.
+                withCredentials([usernamePassword(
+                    credentialsId: 'ghcr-pat',
+                    usernameVariable: 'GHCR_USER',
+                    passwordVariable: 'GHCR_TOKEN'
+                )]) {
+                    script {
+                        env.GHCR_OWNER     = GHCR_USER.toLowerCase()
+                        env.IMAGE_BACKEND  = "ghcr.io/${env.GHCR_OWNER}/distrimed-backend"
+                        env.IMAGE_FRONTEND = "ghcr.io/${env.GHCR_OWNER}/distrimed-frontend"
+                        env.SHA_SHORT = sh(
+                            returnStdout: true,
+                            script: 'git rev-parse --short=7 HEAD'
+                        ).trim()
+                    }
                 }
-                echo "Build do commit ${env.SHA_SHORT} (branch ${env.BRANCH_NAME ?: 'unknown'})"
+                echo "Build do commit ${env.SHA_SHORT} | owner GHCR: ${env.GHCR_OWNER} | branch: ${env.BRANCH_NAME ?: 'unknown'}"
             }
         }
 
@@ -201,10 +211,14 @@ pipeline {
                 COMPOSE_PROJECT_NAME = 'distrimed-prod'
                 BACKEND_TAG          = "${env.SHA_SHORT}"
                 FRONTEND_TAG         = "${env.SHA_SHORT}"
-                // SEED_ON_BOOT=true neste deploy de portfolio para garantir
-                // que a aplicação prod fique imediatamente demonstrável (login
-                // john/123456 funciona). Em produção real, este seed seria
-                // executado uma única vez como job separado.
+                // GHCR_OWNER vem do Checkout (derivado do username da
+                // credencial ghcr-pat). docker compose lê e monta o path
+                // completo da imagem.
+                GHCR_OWNER           = "${env.GHCR_OWNER}"
+                // SEED_ON_BOOT=true neste deploy de demo para garantir
+                // que a aplicação prod fique imediatamente demonstrável
+                // (login john/123456 funciona). Em produção real, este seed
+                // seria executado uma única vez como job separado.
                 SEED_ON_BOOT         = 'true'
                 FRONTEND_PORT        = '8090'
             }
