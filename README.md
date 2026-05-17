@@ -110,10 +110,11 @@ Trabalho de base que destrava todo o resto.
 - [x] Ajustes paralelos:
   - `prisma` CLI movido de `devDependencies` para `dependencies` (necessário para `migrate deploy` em runtime).
   - `package-lock.json` removido do `.gitignore` (necessário para `npm ci` reprodutível no Jenkins).
-- [ ] Validar build local: `docker build -t distrimed-backend backend/` e `docker run --rm -p 3000:3000 -e JWT_SECRET=dev distrimed-backend`. _(Pendente: aguardando Docker Desktop ser instalado.)_
-- [ ] Validar `/health` respondendo dentro do container.
+- [x] `schema.prisma` com `binaryTargets = ["native", "debian-openssl-3.0.x"]` (descoberto na validação: imagem `node:20-slim` usa OpenSSL 3 e o Prisma Client precisava do engine correspondente).
+- [x] Validar build local: `docker build -t distrimed-backend:dev backend/` (~493 MB).
+- [x] Validar `/health` respondendo dentro do container: `GET http://localhost:3000/health` → `{"status":"ok"}`; `HEALTHCHECK` reportando `healthy`.
 
-**Critério de aceite:** container do backend sobe isoladamente e responde em `GET /health`.
+**Critério de aceite:** container do backend sobe isoladamente e responde em `GET /health`. ✅
 
 ---
 
