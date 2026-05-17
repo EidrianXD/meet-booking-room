@@ -1,8 +1,8 @@
 # Distrimed — Sistema de Gerenciamento de Salas
 
-Monorepo contendo o **backend** (Node.js + Express + Prisma + PostgreSQL) e o **frontend** (Quasar/Vue) do sistema de agendamento de salas de reunião, com **containerização Docker** e **pipeline CI/CD completo no Jenkins**.
+Monorepo contendo o backend (Node.js + Express + Prisma + PostgreSQL) e o frontend (Quasar/Vue) do sistema de agendamento de salas de reunião, com containerização Docker e pipeline CI/CD no Jenkins.
 
-> **Status:** pipeline end-to-end funcional — push no `main` → checkout com submodules → testes paralelos → build de imagens → scan Trivy (0 CVEs) → push GHCR → deploy local com 3 containers (`postgres` + `backend` + `frontend`) e ordenação por healthcheck.
+Fluxo do pipeline: push no `main` → checkout com submodules → testes paralelos → build de imagens → scan Trivy → push GHCR → deploy local com 3 containers (`postgres`, `backend`, `frontend`) ordenados por healthcheck.
 
 ---
 
@@ -30,7 +30,7 @@ Monorepo contendo o **backend** (Node.js + Express + Prisma + PostgreSQL) e o **
 git clone --recurse-submodules https://github.com/EidrianXD/meet-booking-room.git
 cd meet-booking-room
 cp .env.example .env             # edite JWT_SECRET e DB_PASSWORD
-docker compose up --build        # builda local; ~2 min na primeira vez
+docker compose up --build
 ```
 
 Depois abra **http://localhost:8080** e faça login com `john` / `123456`.
@@ -41,14 +41,14 @@ Depois abra **http://localhost:8080** e faça login com `john` / `123456`.
 # em outro terminal
 cd docker/jenkins
 cp .env.example .env             # edite JENKINS_ADMIN_PASSWORD
-docker compose up -d --build     # ~3 min na primeira vez
+docker compose up -d --build
 ```
 
-Acesse **http://localhost:8081**, siga o passo-a-passo de [`docker/jenkins/README.md`](docker/jenkins/README.md) (criar credenciais `ghcr-pat`, `jwt-secret-prod`, `db-password-prod` + criar o job `distrimed`). Clique **Build Now** — em ≈3 min você terá:
+Acesse **http://localhost:8081**, siga o passo-a-passo de [`docker/jenkins/README.md`](docker/jenkins/README.md) (criar credenciais `ghcr-pat`, `jwt-secret-prod`, `db-password-prod` + criar o job `distrimed`). Clique **Build Now**. Ao final:
 - Imagens em https://github.com/EidrianXD?tab=packages
-- Deploy de produção em **http://localhost:8090** (independente da app de dev em :8080)
+- Deploy em **http://localhost:8090** (independente da app de dev em :8080)
 
-Este documento descreve o **planejamento de containerização e CI/CD** implementado em fases incrementais.
+Este documento descreve a containerização e CI/CD implementados em fases incrementais.
 
 ---
 
@@ -74,19 +74,19 @@ Pontos relevantes para a containerização:
 
 ## 2. Objetivo
 
-Entregar um **pipeline DevOps de qualidade sênior**, demonstrável end-to-end, contendo:
+Entregar um pipeline DevOps funcional end-to-end, contendo:
 
-1. Imagens Docker otimizadas (multi-stage, não-root, mínimas) para backend e frontend.
-2. Orquestração local via Docker Compose para desenvolvimento e demonstração.
-3. Pipeline declarativo no **Jenkins** cobrindo: lint, testes, build, scan de vulnerabilidades, push de imagens e deploy.
-4. Imagens versionadas e publicadas no **GitHub Container Registry (GHCR)**.
-5. Scan de segurança com **Trivy** como quality gate.
+1. Imagens Docker multi-stage, executando como usuário não-root, para backend e frontend.
+2. Orquestração local via Docker Compose para desenvolvimento e deploy.
+3. Pipeline declarativo no Jenkins cobrindo: lint, testes, build, scan de vulnerabilidades, push de imagens e deploy.
+4. Imagens versionadas e publicadas no GitHub Container Registry (GHCR).
+5. Scan de segurança com Trivy como quality gate de build.
 
-Princípios norteadores:
+Restrições do escopo:
 
-- **Pragmatismo sobre teatro**: cada peça precisa fazer sentido na demo. Sem Kubernetes, sem service mesh, sem Helm — pode-se mencionar como próximo passo.
-- **Incremental**: ao final de cada fase o sistema continua funcional. Sem janela de "tudo quebrado".
-- **Demonstrável**: tudo roda em uma única máquina (laptop ou VPS pequeno).
+- **Incremental**: ao final de cada fase o sistema continua funcional.
+- **Local**: tudo roda em uma única máquina. Kubernetes/Helm/service mesh ficam fora do escopo.
+- **Reprodutível**: o setup do Jenkins é definido em código (JCasC + plugins.txt), não em UI.
 
 ---
 
@@ -134,28 +134,28 @@ Princípios norteadores:
 
 ## 4. Decisões de design (e seus tradeoffs)
 
-| Decisão | Por quê | Alternativa descartada |
+| Decisão | Motivo | Alternativa descartada |
 |---|---|---|
-| **SQLite na Fase 1 → Postgres na Fase 6** | Reduziu superfície de falha do pipeline inicial; Postgres entrou só depois que a CI/CD estava estável. Em cada estágio o sistema continuou funcional. | Já entrar com Postgres adicionaria healthchecks, secret do DB e ordering — caminho crítico maior, mais risco de pipeline meio quebrado por dias. |
-| **Um único `docker-compose.yml` + `-p <project>`** | Dev (`distrimed`) e prod (`distrimed-prod`) saem do mesmo arquivo, isolados pelo prefixo do projeto. Volumes e networks sem `name:` explícito = prefixo automático. | Dois composes (`dev.yml`/`prod.yml`) é overhead sem ganho real. |
-| **Jenkins local com `docker.sock` montado (DooD)** | Padrão de mercado para Jenkins em Docker buildando imagens. Aceito como trade-off documentado de privilégio. | Docker-in-Docker (DinD) tem custo de setup; kaniko é mais "puro" mas adiciona atrito sem ganho proporcional. Em produção real, agente remoto isolado seria o caminho. |
-| **Deploy via `compose up` no mesmo host do Jenkins** | Zero setup de SSH/firewall/DNS para a demo. Em produção real: SSH para `$DEPLOY_HOST` antes do `compose pull && up -d`. | Servidor remoto exigiria infraestrutura adicional fora do escopo de demonstração local. |
-| **GHCR como registry** | Gratuito, integrado ao GitHub, autenticação via PAT. Tags imutáveis `<sha-7>` + ponteiro `latest` para rollback de 1 linha. | Docker Hub tem limites de pull; Harbor/Nexus self-hosted é mais um container para manter. |
-| **Trivy com `--severity HIGH,CRITICAL --ignore-unfixed --skip-dirs <npm bundled>`** | Quality gate que **pegou e nos fez corrigir 40+ CVEs reais** (5 backend, 35 frontend). Sem falsos positivos de CVE sem fix disponível. Não silencia, conserta. | Falhar em qualquer CVE deixa pipeline vermelho sem ação possível. Ignorar todos = teatro de segurança. |
-| **JCasC (Configuration as Code) no Jenkins** | Admin user bootstrappado via YAML + env vars; sem setup wizard. Reprodutível e idempotente — derruba o Jenkins, sobe de novo, tudo igual. | Wizard manual + plugins instalados via UI = setup não-reprodutível. |
-| **`agent docker { image '...'; reuseNode true }`** | Cada stage de teste roda num container com a versão exata de Node necessária (`node:20-slim` backend, `node:22-slim` frontend). Sem instalar Node no controller. | Instalar Node como tool no Jenkins prende o pipeline a uma versão e exige manutenção. |
-| **SCM polling 1 min em vez de webhook** | Funciona com Jenkins local sem expor porta ao GitHub. Latência aceitável para demo. | Webhook exigiria VPS pública ou túnel ngrok (ver tradeoff documentado no `docker/jenkins/README.md`). |
-| **`SEED_ON_BOOT` como env var no entrypoint** | Mesmo binário roda em dev (seed=true, login imediato) e prod (seed=false, dados controlados). Seed é idempotente (`upsert`). | Compilar dois binários, ou seed só em entrypoint custom de dev, duplica complexidade. |
+| **SQLite na Fase 1 → Postgres na Fase 6** | Reduz superfície de falha do pipeline inicial; Postgres entra depois que a CI/CD está estável. Em cada estágio o sistema continua funcional. | Já entrar com Postgres adicionaria healthchecks, secret do DB e ordering — caminho crítico maior. |
+| **Um único `docker-compose.yml` + `-p <project>`** | Dev (`distrimed`) e prod (`distrimed-prod`) saem do mesmo arquivo, isolados pelo prefixo do projeto. Volumes e networks sem `name:` explícito recebem prefixo automático. | Dois composes (`dev.yml`/`prod.yml`) duplica manutenção. |
+| **Jenkins local com `docker.sock` montado (DooD)** | Permite que o pipeline rode `docker build/push/run` no daemon do host sem aninhar um segundo daemon. | Docker-in-Docker (DinD) tem custo de setup; kaniko adiciona atrito sem ganho proporcional. Em produção remota, agente remoto isolado seria o caminho. |
+| **Deploy via `compose up` no mesmo host do Jenkins** | Evita setup de SSH/firewall/DNS no escopo local. Em produção remota: SSH para `$DEPLOY_HOST` antes do `compose pull && up -d`. | Servidor remoto exige infraestrutura adicional fora do escopo local. |
+| **GHCR como registry** | Gratuito, integrado ao GitHub, autenticação via PAT. Tags imutáveis `<sha-7>` + ponteiro `latest` permitem rollback trocando uma variável. | Docker Hub tem limites de pull; Harbor/Nexus self-hosted adiciona mais um container. |
+| **Trivy com `--severity HIGH,CRITICAL --ignore-unfixed --skip-dirs <npm bundled>`** | Gate ativo: bloqueia o build quando há CVE com fix disponível. Ignora CVEs sem fix (sem ação possível) e o npm bundled do Node base (não executado em runtime). | Falhar em qualquer CVE deixa pipeline vermelho sem ação. Ignorar todos torna o gate inerte. |
+| **JCasC (Configuration as Code) no Jenkins** | Admin user definido em YAML + env vars; sem setup wizard. Reprodutível: derrubar e subir o controller produz a mesma configuração. | Wizard manual + plugins instalados via UI produz setup não-reprodutível. |
+| **`agent docker { image '...'; reuseNode true }`** | Cada stage de teste roda num container com a versão exata de Node necessária (`node:20-slim` backend, `node:22-slim` frontend). Não exige Node instalado no controller. | Instalar Node como tool no Jenkins prende o pipeline a uma versão. |
+| **SCM polling 1 min em vez de webhook** | Funciona com Jenkins local sem expor porta ao GitHub. Latência de até 1 min entre push e build. | Webhook exigiria VPS pública ou túnel ngrok (descrito em `docker/jenkins/README.md`). |
+| **`SEED_ON_BOOT` como env var no entrypoint** | Mesma imagem roda em dev (seed=true, login imediato) e prod (seed=false, dados controlados). Seed é idempotente (`upsert`). | Duas imagens ou entrypoint custom em dev duplica complexidade. |
 
 ---
 
 ## 5. Plano em fases
 
-A implementação é dividida em **fases independentes**. Ao final de cada fase, o estado do repositório é funcional e demonstrável.
+A implementação é dividida em fases independentes. Ao final de cada fase, o estado do repositório é funcional.
 
-### Fase 0 — Preparação (≈30 min)
+### Fase 0 — Preparação
 
-Trabalho de base que destrava todo o resto.
+Trabalho de base que destrava as fases seguintes.
 
 - [x] Adicionar `.gitignore` raiz cobrindo `node_modules`, `dist`, `.env`, `*.db`.
 - [x] Adicionar `.env.example` em `backend/` documentando `JWT_SECRET`, `PORT`, `CORS_ORIGINS`, `DATABASE_URL` (já existia, completo).
@@ -166,7 +166,7 @@ Trabalho de base que destrava todo o resto.
 
 ---
 
-### Fase 1 — Containerização do backend (≈2h)
+### Fase 1 — Containerização do backend
 
 - [x] `backend/Dockerfile` multi-stage:
   - `deps`: instala todas as dependências para o build.
@@ -184,7 +184,7 @@ Trabalho de base que destrava todo o resto.
 
 ---
 
-### Fase 2 — Containerização do frontend (≈1h30)
+### Fase 2 — Containerização do frontend
 
 - [x] `frontend/Dockerfile` multi-stage:
   - `build`: `node:22-slim` (Quasar 2.6 exige Node 22+), roda `quasar build` gerando `dist/spa`.
@@ -199,7 +199,7 @@ Trabalho de base que destrava todo o resto.
 
 ---
 
-### Fase 3 — Orquestração local com Docker Compose (≈1h)
+### Fase 3 — Orquestração local com Docker Compose
 
 - [x] `docker-compose.yml` na raiz com serviços `backend` e `frontend`:
   - Volume nomeado `distrimed-backend-data` montado em `/app/data` (persistência do `dev.db` do SQLite).
@@ -220,7 +220,7 @@ Trabalho de base que destrava todo o resto.
 
 ---
 
-### Fase 4 — Pipeline Jenkins (≈3h)
+### Fase 4 — Pipeline Jenkins
 
 - [x] `docker/jenkins/` — stack do Jenkins local (Docker outside of Docker via socket do host):
   - `Dockerfile` com plugins pré-instalados (workflow, docker-workflow, github, configuration-as-code, etc.), Docker CLI + Compose plugin, `usermod -aG root jenkins` para acesso ao socket.
@@ -289,7 +289,7 @@ Trabalho de base que destrava todo o resto.
 - [x] **Tagging imutável** — toda imagem ganha `<sha-7>` (commit) + `latest`. Rollback é uma linha (`BACKEND_TAG=<sha-anterior> docker compose up -d`).
 - [x] **README com TOC, seção de demo, sumário visual.**
 - [ ] Badge de status do build no README (Jenkins local não tem URL pública; viável só com VPS).
-- [ ] Versionamento semântico das imagens (`v1.0.0`) via tag git — patrão senior mas exige fluxo de release; fora do escopo de demo.
+- [ ] Versionamento semântico das imagens (`v1.0.0`) via tag git — exige fluxo de release; fora do escopo atual.
 - [ ] BuildKit/buildx no Jenkins (acelera build incremental). Hoje usa o builder legacy.
 - [ ] Makefile com atalhos (`make up`, `make test`, `make pipeline-logs`).
 - [ ] Documentar fluxo de migração para VPS pública (texto, sem implementar).
@@ -342,12 +342,12 @@ distrimed/                                ← repo raiz (este)
 
 | Risco | Mitigação |
 |---|---|
-| Jenkins em container precisa buildar Docker → exige `docker.sock` | Decisão consciente, documentada. Em produção real, usar agente remoto ou BuildKit em VM isolada. |
-| SQLite no container é considerado smell em produção | **Resolvido na Fase 6** — projeto agora roda em PostgreSQL 16 com healthcheck `pg_isready` e secret management. |
-| Trivy pode falhar dia 1 com CVEs da base do Node | Aconteceu nas builds #1 e #2; a resposta foi **corrigir as bases** (`apt-get upgrade` + `apk upgrade`), não silenciar o gate. Build #3 passou com 0 CVEs. |
-| Frontend precisa saber URL do backend em build-time (SPA estática) | Resolvido com `ARG VITE_API_BASE_URL=/api` (default) + reverse proxy Nginx do mesmo container. Resultado: **uma imagem** roda em qualquer ambiente sem rebuild. |
-| Race condition entre `migrate deploy` e múltiplas instâncias do backend | Não relevante para escala de demo (1 instância). Em produção, migration roda como job separado antes do rollout. |
-| Credenciais (`GHCR_PAT`, `JWT_SECRET`, `DB_PASSWORD`) nunca podem tocar disco/repo | Todas vivem em Jenkins Credentials, injetadas via `withCredentials` apenas dentro do bloco `sh`. `docker logout` em `post { always }` garante limpeza. |
+| Jenkins em container precisa buildar Docker → exige `docker.sock` | Trade-off documentado. Em produção remota, usar agente remoto ou BuildKit em VM isolada. |
+| Usar SQLite em container | Resolvido na Fase 6 — projeto roda em PostgreSQL 16 com healthcheck `pg_isready` e senha em Jenkins Credentials. |
+| Trivy falhar com CVEs da base do Node | Ocorreu nas builds #1 e #2; resposta foi atualizar as bases (`apt-get upgrade` + `apk upgrade`) em vez de afrouxar o gate. Build #3 passou com 0 CVEs. |
+| Frontend precisa saber URL do backend em build-time (SPA estática) | Resolvido com `ARG VITE_API_BASE_URL=/api` + reverse proxy Nginx no mesmo container. Uma imagem serve qualquer ambiente sem rebuild. |
+| Race condition entre `migrate deploy` e múltiplas instâncias do backend | Não relevante no escopo atual (1 instância). Em produção, migration roda como job separado antes do rollout. |
+| Credenciais (`GHCR_PAT`, `JWT_SECRET`, `DB_PASSWORD`) tocando disco/repo | Todas vivem em Jenkins Credentials, injetadas via `withCredentials` apenas dentro do bloco `sh`. `docker logout` em `post { always }` limpa o registry config. |
 | Lock contention do Trivy quando 2 scans rodam em paralelo no mesmo cache | Resolvido na build #2: caches separados por scan (`trivy-cache-backend`, `trivy-cache-frontend`). |
 | Schema do Prisma + base image incompatíveis em runtime (`debian-openssl-1.1.x` vs `3.0.x`) | Resolvido na Fase 1: `binaryTargets = ["native", "debian-openssl-3.0.x"]`. |
 
@@ -357,30 +357,30 @@ distrimed/                                ← repo raiz (este)
 
 | Fase | Status | Builds que validaram |
 |---|---|---|
-| 0 — Preparação | ✅ | — |
-| 1 — Dockerfile backend | ✅ | validação local |
-| 2 — Dockerfile frontend | ✅ | validação local |
-| 3 — Docker Compose | ✅ | validação local |
-| 4 — Jenkins pipeline | ✅ | builds #1 (failed: CVEs), #2 (failed: lock), **#3 (success)** |
-| 5 — Trivy refinements | ✅ (parcial — SARIF é opcional) | build #3 |
-| 6 — Postgres | ✅ | **build #4 (success)** |
-| 7 — Polimentos | ✅ (parcial — isolamento dev/prod + tagging + README) | — |
+| 0 — Preparação | concluída | — |
+| 1 — Dockerfile backend | concluída | validação local |
+| 2 — Dockerfile frontend | concluída | validação local |
+| 3 — Docker Compose | concluída | validação local |
+| 4 — Jenkins pipeline | concluída | builds #1 (falha: CVEs), #2 (falha: lock), #3 (sucesso) |
+| 5 — Trivy refinements | concluída (SARIF arquivado fica pendente, opcional) | build #3 |
+| 6 — Postgres | concluída | build #4 (sucesso) |
+| 7 — Polimentos | parcial (isolamento dev/prod, tagging e README concluídos; demais opcionais) | — |
 
-**Métricas do pipeline (build #4):**
-- Tempo total: ~3 min (cold cache de imagens base) / ~1 min (warm cache).
-- Imagens publicadas: 4 tags por build (backend SHA + latest, frontend SHA + latest).
-- Vulnerabilidades aprovadas: **0 HIGH/CRITICAL corrigíveis** nas duas imagens (40+ CVEs corrigidos no caminho, não silenciados).
-- Containers no deploy prod: 3 (`postgres healthy → backend healthy → frontend started`).
+**Resultado do pipeline na build #4:**
+- 4 tags publicadas no GHCR por build (backend SHA + latest, frontend SHA + latest).
+- 0 CVEs HIGH/CRITICAL com fix disponível nas duas imagens (40+ CVEs corrigidos via `apt-get upgrade` / `apk upgrade` nas bases).
+- 3 containers no deploy: `postgres healthy → backend healthy → frontend started`.
 
-**Como reiniciar do zero:**
+**Reinicializar do zero:**
+
 ```bash
 docker compose -p distrimed-prod down -v
 docker compose -p distrimed down -v
 cd docker/jenkins && docker compose down -v && cd ../..
-# (depois suba na ordem: jenkins → aplicação dev → trigger pipeline)
+# subir na ordem: jenkins → aplicação dev → disparar pipeline
 ```
 
-**Commits seguem padrão semântico** (`tipo(escopo): título`) sem co-author, em três repositórios:
+**Commits seguem padrão semântico** (`tipo(escopo): título`), sem co-author, em três repositórios:
 - raiz: `github.com/EidrianXD/meet-booking-room`
 - backend: `github.com/EidrianXD/meeting-room-booking-api`
 - frontend: `github.com/EidrianXD/meeting-room-booking-frontend`
