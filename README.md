@@ -120,15 +120,16 @@ Trabalho de base que destrava todo o resto.
 
 ### Fase 2 — Containerização do frontend (≈1h30)
 
-- [ ] `frontend/Dockerfile` multi-stage:
-  - `build`: `node:20-alpine`, roda `quasar build` gerando `dist/spa`.
-  - `runtime`: `nginx:alpine` servindo `dist/spa` com config customizada para SPA (fallback para `index.html` em rotas não-encontradas, gzip ativo).
-- [ ] `frontend/.dockerignore`.
-- [ ] `frontend/nginx.conf` mínimo, otimizado para SPA.
-- [ ] Definir como o frontend descobre a URL do backend em build-time (`VITE_API_URL` ou similar como `ARG` do Docker).
-- [ ] Validar build local: `docker build -t distrimed-frontend frontend/` e acesso na porta 80.
+- [x] `frontend/Dockerfile` multi-stage:
+  - `build`: `node:22-slim` (Quasar 2.6 exige Node 22+), roda `quasar build` gerando `dist/spa`.
+  - `runtime`: `nginx:1.27-alpine` servindo `dist/spa` com config customizada (SPA fallback, gzip, cache imutável para assets versionados, `HEALTHCHECK` em `/healthz`).
+- [x] `frontend/.dockerignore`.
+- [x] `frontend/docker/nginx.conf` mínimo e otimizado para SPA, com **reverse proxy `/api/* → http://backend:3000/`** (resolve CORS, evita rebuild por ambiente).
+- [x] URL da API resolvida via `ARG VITE_API_BASE_URL=/api` (default casa com o proxy do Nginx; pode ser sobrescrito por `--build-arg` se precisar de URL absoluta).
+- [x] `package-lock.json` removido do `.gitignore` do frontend (necessário para `npm ci` reprodutível no Jenkins).
+- [x] Validação integrada: `distrimed-frontend:dev` (75 MB) e `distrimed-backend:dev` numa network compartilhada — `GET /` serve a SPA, `GET /api/health` proxia para o backend e retorna `{"status":"ok"}`.
 
-**Critério de aceite:** SPA carrega no navegador e consegue chamar o backend rodando em outro container.
+**Critério de aceite:** SPA carrega no navegador e consegue chamar o backend rodando em outro container. ✅
 
 ---
 
