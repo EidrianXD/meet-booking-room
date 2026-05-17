@@ -14,9 +14,13 @@
 
 services:
   backend:
+    # `image` define a tag final, seja para builds locais (dev) seja para
+    # pulls de imagens já pushadas pelo Jenkins (CI/CD). O default `dev`
+    # casa com builds locais (`docker compose up --build`); no deploy via
+    # Jenkins, BACKEND_TAG é setado para o commit SHA-7 da build.
+    image: ghcr.io/eidrianxd/distrimed-backend:${BACKEND_TAG:-dev}
     build:
       context: ./backend
-    image: distrimed-backend:dev
     container_name: distrimed-backend
     restart: unless-stopped
     environment:
@@ -33,6 +37,7 @@ services:
     # e usado pelo `depends_on: condition: service_healthy` abaixo.
 
   frontend:
+    image: ghcr.io/eidrianxd/distrimed-frontend:${FRONTEND_TAG:-dev}
     build:
       context: ./frontend
       args:
@@ -40,7 +45,6 @@ services:
         # do Nginx (mesmo container). Sobrescreva apenas se for servir a SPA
         # em domínio separado do backend.
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
-    image: distrimed-frontend:dev
     container_name: distrimed-frontend
     restart: unless-stopped
     ports:

@@ -1,0 +1,35 @@
+# Plugins do Jenkins pré-instalados no boot do controller.
+# Cada linha é um plugin do Update Center (https://plugins.jenkins.io).
+# Versões intencionalmente não fixadas: o install-plugins.sh resolve a
+# versão compatível com a base atual do Jenkins na build da imagem.
+
+# Pipeline declarativo + visualização
+workflow-aggregator
+pipeline-stage-view
+pipeline-graph-view
+
+# Integração com Docker (agentes docker { image ... }, build, push)
+docker-workflow
+docker-plugin
+
+# Git e checkout com submodules
+git
+github
+github-branch-source
+
+# Credenciais (PAT do GHCR, JWT_SECRET prod)
+credentials
+credentials-binding
+plain-credentials
+
+# Configuration as Code (carrega config a partir de YAML)
+configuration-as-code
+
+# Job DSL (definição programática de jobs)
+job-dsl
+
+# Qualidade de vida
+timestamper
+ws-cleanup
+ansicolor
+build-timeout

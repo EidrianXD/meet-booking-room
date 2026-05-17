@@ -1,0 +1,36 @@
+# Jenkins Configuration as Code (JCasC).
+# Lido automaticamente do path apontado por CASC_JENKINS_CONFIG.
+# Variáveis ${...} são interpoladas a partir do ambiente do container.
+
+jenkins:
+  systemMessage: "Distrimed — Pipeline CI/CD local"
+  numExecutors: 2
+  mode: NORMAL
+  scmCheckoutRetryCount: 2
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_ID:-admin}"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  remotingSecurity:
+    enabled: true
+
+unclassified:
+  location:
+    url: "http://localhost:8081/"
+
+  # Aceita SCM polling sem checagem extra.
+  scmGit:
+    addGitTagAction: false
+    allowSecondFetch: false
+    createAccountBasedOnEmail: false
+    hideCredentials: false
+    showEntireCommitSummaryInChanges: false
+    useExistingAccountWithSameEmail: false

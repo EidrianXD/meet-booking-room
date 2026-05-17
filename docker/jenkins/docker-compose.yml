@@ -1,0 +1,46 @@
+# =============================================================================
+# Stack do Jenkins controller para o pipeline CI/CD do Distrimed.
+#
+# Uso:
+#   cp .env.example .env        # editar JENKINS_ADMIN_PASSWORD
+#   docker compose up -d
+#   open http://localhost:8081  # login com JENKINS_ADMIN_ID / PASSWORD
+#
+# Padrão "Docker outside of Docker" (DooD): o socket do daemon do host é
+# montado dentro do container. As builds disparadas pelo pipeline rodam
+# no Docker do host. É a forma mais simples e funcional para Jenkins em
+# Docker — kaniko / DinD são alternativas mais "puras" mas adicionam atrito.
+# =============================================================================
+
+services:
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: distrimed-jenkins:lts
+    container_name: distrimed-jenkins
+    restart: unless-stopped
+    ports:
+      - "${JENKINS_PORT:-8081}:8080"   # UI / SCM webhook (futuro)
+      - "50000:50000"                  # Agente JNLP (não usado por padrão)
+    environment:
+      JENKINS_ADMIN_ID: ${JENKINS_ADMIN_ID:-admin}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?defina JENKINS_ADMIN_PASSWORD no .env}
+      # JCasC já está apontado para /var/jenkins_home/casc/jenkins.yaml na imagem.
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      # Socket do Docker do host — habilita docker build/push/run a partir
+      # do pipeline (DooD). Em produção real (Jenkins acessível externamente),
+      # considere usar um agente remoto em vez deste pattern.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jenkins-net
+
+volumes:
+  jenkins-home:
+    name: distrimed-jenkins-home
+
+networks:
+  jenkins-net:
+    name: distrimed-jenkins-net
+    driver: bridge
