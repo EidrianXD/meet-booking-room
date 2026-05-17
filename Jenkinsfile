@@ -115,6 +115,11 @@ pipeline {
         }
 
         stage('Trivy scan') {
+            // --skip-dirs ignora o `npm` bundled na imagem base do Node
+            // (usr/local/lib/node_modules/npm). Esse npm é uma ferramenta
+            // de instalação que vem com a imagem oficial node:*-slim e NÃO
+            // é executado em runtime (o backend roda `node dist/src/main.js`).
+            // CVEs ali são ruído — não há vetor de exploração no nosso runtime.
             parallel {
                 stage('backend') {
                     steps {
@@ -125,6 +130,7 @@ pipeline {
                                 aquasec/trivy:latest image \
                                 --severity HIGH,CRITICAL \
                                 --ignore-unfixed \
+                                --skip-dirs usr/local/lib/node_modules/npm \
                                 --exit-code 1 \
                                 --no-progress \
                                 --timeout 5m \
@@ -141,6 +147,7 @@ pipeline {
                                 aquasec/trivy:latest image \
                                 --severity HIGH,CRITICAL \
                                 --ignore-unfixed \
+                                --skip-dirs usr/local/lib/node_modules/npm \
                                 --exit-code 1 \
                                 --no-progress \
                                 --timeout 5m \
