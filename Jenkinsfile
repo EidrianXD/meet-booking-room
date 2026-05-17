@@ -120,13 +120,18 @@ pipeline {
             // de instalação que vem com a imagem oficial node:*-slim e NÃO
             // é executado em runtime (o backend roda `node dist/src/main.js`).
             // CVEs ali são ruído — não há vetor de exploração no nosso runtime.
+            //
+            // Cada branch paralela usa seu PRÓPRIO volume de cache. O cache do
+            // Trivy usa BoltDB com lock exclusivo durante a init; compartilhar
+            // entre scans paralelos gera "cache may be in use by another process".
+            // Custo: ~250 MB extras de disco no host (cada cache baixa o DB).
             parallel {
                 stage('backend') {
                     steps {
                         sh '''
                             docker run --rm \
                                 -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v trivy-cache:/root/.cache/ \
+                                -v trivy-cache-backend:/root/.cache/ \
                                 aquasec/trivy:latest image \
                                 --severity HIGH,CRITICAL \
                                 --ignore-unfixed \
@@ -143,7 +148,7 @@ pipeline {
                         sh '''
                             docker run --rm \
                                 -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v trivy-cache:/root/.cache/ \
+                                -v trivy-cache-frontend:/root/.cache/ \
                                 aquasec/trivy:latest image \
                                 --severity HIGH,CRITICAL \
                                 --ignore-unfixed \
