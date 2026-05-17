@@ -1,18 +1,37 @@
 # =============================================================================
-# Orquestração local do sistema Distrimed (backend + frontend).
+# Orquestração local do sistema Distrimed (postgres + backend + frontend).
 #
 # Uso típico:
-#   cp .env.example .env        # ajustar JWT_SECRET, etc.
+#   cp .env.example .env        # ajustar JWT_SECRET, DB_PASSWORD, etc.
 #   docker compose up --build
 #   # acessar http://localhost:${FRONTEND_PORT:-8080}
 #
 # O backend NÃO é exposto na host network — toda comunicação SPA → API passa
-# pelo reverse proxy do Nginx do frontend (/api/* → backend:3000/). Isso
-# resolve CORS, simula o cenário real de produção e mantém a superfície de
-# rede mínima.
+# pelo reverse proxy do Nginx do frontend (/api/* → backend:3000/). O Postgres
+# também só conversa via network interna; nenhuma porta exposta no host
+# (mantém a superfície de ataque mínima).
 # =============================================================================
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: distrimed-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-distrimed}
+      POSTGRES_USER: ${POSTGRES_USER:-distrimed}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - distrimed-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-distrimed} -d ${POSTGRES_DB:-distrimed}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
   backend:
     # `image` define a tag final, seja para builds locais (dev) seja para
     # pulls de imagens já pushadas pelo Jenkins (CI/CD). O default `dev`
@@ -26,15 +45,14 @@ services:
     environment:
       JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env}
       SEED_ON_BOOT: ${SEED_ON_BOOT:-false}
-      # PORT e DATABASE_URL já têm defaults na imagem (3000 e /app/data/dev.db).
-    volumes:
-      # Persistência do SQLite entre restarts. Substituído por serviço Postgres
-      # na Fase 6.
-      - backend-data:/app/data
+      DATABASE_URL: postgresql://${POSTGRES_USER:-distrimed}:${DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-distrimed}
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - distrimed-net
     # O HEALTHCHECK herdado da imagem (Dockerfile) é respeitado pelo Compose
-    # e usado pelo `depends_on: condition: service_healthy` abaixo.
+    # e usado pelo `depends_on: condition: service_healthy` do frontend abaixo.
 
   frontend:
     image: ghcr.io/eidrianxd/distrimed-frontend:${FRONTEND_TAG:-dev}
@@ -56,10 +74,11 @@ services:
       - distrimed-net
 
 volumes:
-  backend-data:
-    name: distrimed-backend-data
+  # Volume sem `name:` explícito — derivado do project name. Assim dev
+  # (`-p distrimed`) e prod (`-p distrimed-prod`) ficam isolados.
+  postgres-data:
 
 networks:
+  # Network sem `name:` explícito pelo mesmo motivo do volume acima.
   distrimed-net:
-    name: distrimed-net
     driver: bridge

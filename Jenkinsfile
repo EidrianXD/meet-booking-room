@@ -201,12 +201,17 @@ pipeline {
                 COMPOSE_PROJECT_NAME = 'distrimed-prod'
                 BACKEND_TAG          = "${env.SHA_SHORT}"
                 FRONTEND_TAG         = "${env.SHA_SHORT}"
-                SEED_ON_BOOT         = 'false'
+                // SEED_ON_BOOT=true neste deploy de portfolio para garantir
+                // que a aplicação prod fique imediatamente demonstrável (login
+                // john/123456 funciona). Em produção real, este seed seria
+                // executado uma única vez como job separado.
+                SEED_ON_BOOT         = 'true'
                 FRONTEND_PORT        = '8090'
             }
             steps {
                 withCredentials([
                     string(credentialsId: 'jwt-secret-prod', variable: 'JWT_SECRET'),
+                    string(credentialsId: 'db-password-prod', variable: 'DB_PASSWORD'),
                     usernamePassword(
                         credentialsId: 'ghcr-pat',
                         usernameVariable: 'GHCR_USER',
