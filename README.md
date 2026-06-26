@@ -1,4 +1,4 @@
-# Distrimed — Sistema de Gerenciamento de Salas
+# Sistema de Gerenciamento de Salas
 
 Monorepo contendo o backend (Node.js + Express + Prisma + PostgreSQL) e o frontend (Quasar/Vue) do sistema de agendamento de salas de reunião, com containerização Docker e pipeline CI/CD no Jenkins.
 
